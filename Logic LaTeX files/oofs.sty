@@ -1,0 +1,129 @@
+\ProvidesPackage{oofs}
+% common definitions for "Object-Oriented Formal Specification"
+\NeedsTeXFormat{LaTeX2e}\RequirePackage{amsmath,amssymb,ifthen}
+
+\newcommand{\sep}{\,;~} % separator
+
+\newcommand*{\m}[1]{\ensuremath{#1}}
+
+\renewcommand*{\i}[1]{\m{\mathit{#1}}} % identifier
+
+\newcommand*{\g}[1]{\m{\mathbb{#1}}}   % given set name
+
+\newcommand*{\p}[1]{\m{\mathsf{#1}}}   % pre-defined symbol
+
+\renewcommand*{\t}[1]{\m{\mathtt{#1}}} % text in teletype font
+
+\newcommand*{\s}[1]{\m{\mathcal{#1}}}  % calligraphic {UC let}
+
+\renewcommand*{\c}[1]{\mbox{\small//~\sl{#1}}} % spec comment
+
+\newcommand{\imp}{\,\Rightarrow\,}   % implies
+\renewcommand{\iff}{\,\Leftrightarrow\,} % iff
+
+\newcommand{\upto}{\mathbin{..}}       % interval
+
+\newcommand{\disj}{\mathrel{\lozenge}} % disjoint
+
+\newcommand{\tfun}{\rightarrow}      % total function
+\newcommand{\pfun}{\nrightarrow}     % partial function
+\newcommand{\trel}{\leftrightarrow}  % total relation
+\newcommand{\prel}{\nleftrightarrow} % partial relation
+
+\newcommand{\pow}{\raisebox{0.5ex}{\large$\wp$}\,}  % powerset
+
+\renewcommand{\exp}{\mathbin{\mbox{\tt\^{}}}} % raise to power
+
+\newcommand*{\all}[2]{\;\!\forall\,{#1}\bullet{#2}} % for all
+\newcommand*{\exi}[2]{    \exists\,{#1}\bullet{#2}} % exists
+\newcommand*{\lam}[2]{\;\!\lambda\,{#1}\bullet{#2}} % lambda
+\newcommand*{\uni}[2]{	  \bigcup\,{#1}\bullet{#2}} % union
+
+\newcommand{\tclos}{^{\scriptscriptstyle+}} % transitive closure
+\newcommand{\rclos}{^{\scriptstyle*}}  % reflexive trans closure
+
+\newcommand{\domr}{\mathbin{\vartriangleleft}}  % dom restriction
+\newcommand{\domx}{\mathbin{{\domr}\llap{$-$}}} % dom exclusion
+\newcommand{\codr}{\mathbin{\vartriangleright}} % cod restriction
+\newcommand{\codx}{\mathbin{{\codr}\llap{$-$}}} % cod exclusion
+
+\newcommand{\join}{\mathbin{\mbox{\sf\&}}} % relational join
+\renewcommand{\prod}{\mathbin{\otimes}}    % relational product
+\newcommand{\oride}{\mathbin{\lessdot}}    % relational overriding
+
+\newcommand{\csel}	% selection (compositional form)
+	{\mathbin{\raisebox{0.2ex}{$\scriptstyle\odot$}}}
+
+
+\newlength{\FS@sw}	% std spec width
+\newlength{\FS@dw}	% default width
+
+\newcommand*{\defwidth}[1][5cm]	% reset default width, initialize
+	{\setlength{\FS@dw}{#1}}\defwidth
+
+\newenvironment*{showspecs}[1][\FS@dw]	% [spec width] or default
+	{\setlength{\FS@sw}{#1}\par\medskip\noindent
+	 \FS@ind\begin{minipage}[t]{\FS@sw}}
+	{\end{minipage}\FS@ind\par\medskip}
+
+\newcommand{\showbeside} % continue at top of column 2
+	{\end{minipage}\hfill\begin{minipage}[t]{\FS@sw}}
+
+\newcommand{\showmore} % end beside, continue column 1
+	{\end{minipage}\FS@ind\par\medskip\noindent
+	 \FS@ind\begin{minipage}[t]{\FS@sw}}
+
+\newcommand{\FS@ind}{\hspace*{1.5em}} % std indent
+
+\newcommand*{\FS@eqs}[1] % {\equiv} or other symbol
+	{\ifthenelse{\equal{#1}{}} {} % omit if empty
+	{\hspace*{-1.5em}\makebox[1.5em]{#1}}}
+
+\newenvironment{desc} % informal description
+	{\begin{minipage}[t]{\FS@sw}\mbox{}\\[-0.5ex]\small\sffamily}
+	{\end{minipage}\par}
+
+\newenvironment*{spec}[2][] % [\equiv] {title}
+	{\begin{minipage}[t]{\FS@sw}\FS@eqs{\m{#1}}%
+	 \FS@ft{\m{#2}}\begin{FS@ff}{false}}
+	{\end{FS@ff}\end{minipage}\par}
+
+\newenvironment*{specp}[2][] % [\equiv] {title}, imm post
+	{\begin{minipage}[t]{\FS@sw}\FS@eqs{\m{#1}}%
+	 \FS@ft{\m{#2}}\begin{FS@ff}{true}}
+	{\end{FS@ff}\end{minipage}\par}
+
+\newenvironment*{FS@ff}[1] % framed form {imm post?}
+	{\begin{math}\begin{array}{|@{~\,}l@{}}\hline
+	 \ifthenelse{\boolean{#1}} {\\[-2.5ex]\hline} {}%
+	 \FS@fw\makebox[\FS@sw]{}\\[-2ex]}
+	{\\[-2ex]\\\hline\end{array}\end{math}}
+
+\newlength{\FS@fs} % frame column separator
+\settowidth{\FS@fs}{~\,}\addtolength{\FS@fs}{\arrayrulewidth}
+
+\newcommand*{\FS@ft}[1]{\raisebox{-0.75ex}{}#1\\} % frame title
+
+\newcommand*{\FS@fw}[1][1]{\addtolength{\FS@sw}{-#1\FS@fs}}
+
+\newcommand{\gap}{\mbox{}\\[-2ex]} % \\[0.75ex]
+
+\newcommand{\post} % normal post-condition, following pre
+	{\\\gap\hline\\[-2.5ex]\hline\gap} %
+
+\newenvironment{alt} % nested alternative
+	{\FS@fw[2]\begin{minipage}{\FS@sw}%
+	 \mbox{}\\[0.75ex]\begin{FS@ff}{false}}
+	{\end{FS@ff}\end{minipage}}
+
+\newenvironment*{nest}[1] % nested {quant}
+	{\FS@fw[2]\begin{minipage}{\FS@sw}%
+	 \FS@ft{\m{#1}}\begin{FS@ff}{false}}
+	{\end{FS@ff}\end{minipage}}
+
+\newenvironment*{nestp}[1] % nested {quant}, imm post	
+	{\FS@fw[2]\begin{minipage}{\FS@sw}%
+	 \FS@ft{\m{#1}}\begin{FS@ff}{true}}
+	{\end{FS@ff}\end{minipage}}
+
+% end of common definitions

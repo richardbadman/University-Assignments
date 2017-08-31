@@ -1,0 +1,11 @@
+\ProvidesPackage{oovm}
+% common definitions for "Object-Oriented Visual Modelling"
+\NeedsTeXFormat{LaTeX2e}\RequirePackage{oofs,epsfig}
+
+\newlength{\VM@dw} % diagram width, for .eps file
+
+\newcommand*{\diag}[1] % {.eps file-name}
+	{\settowidth{\VM@dw}{\epsfig{file = #1}}%
+	 \parbox{\VM@dw}{\epsfig{file = #1}}}
+
+% end of common definitions

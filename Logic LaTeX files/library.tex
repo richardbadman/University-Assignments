@@ -1,0 +1,1169 @@
+\documentclass[12pt,a4paper]{article}
+\title{Library System extension}
+%\author{}
+\date{}
+
+\usepackage{oofs}
+
+\addtolength{\textheight}{10ex}
+
+\setlength{\unitlength}{1mm} % for pictures
+
+\newcounter{exer} % for exercises
+\renewcommand{\thefootnote}{\fnsymbol{footnote}} % symbols
+\newcommand{\exer} % ref exercise (by a marginal note)
+	{\stepcounter{exer}{\;\arabic{exer}}}
+
+\begin{document}
+%\maketitle
+\begin{center}
+{\LARGE{Library System extension}}\\
+\vspace{.5cm}
+{\large{Richard Goodman}}\\
+\vspace{.1cm}
+{13842540}
+\end{center}
+\vspace{.5cm}
+
+
+
+%\vspace{-2cm}
+
+\subsubsection*{Detailed Library Class: $\i{LD}$}
+For the extension we begin by creating a new invariant which introduces new functionalities for the Library system, as well as inheriting the modelling choices in the previous invariants \emph{LL} and \emph{LR}. The concept of this extension is to introduce dates into the system, because \emph{loan} and \emph{reservation} were already defined as relations, we create new relations mapping said loan or reservation to a date. This allows us to then append and query dates onto these relations.
+
+\medskip\noindent With this we can keep a record of key date variables, for example, \emph{ls (loan start date)} and \emph{le (loan end date)}, and a similar case for reservations \emph{rs (reservation start date)} and \emph{re (reservation end date)}.
+
+\medskip\noindent We create a variable of the type \p{DATE} calling it today, this allows us to store today's date in a very abstract way. Finally, there are some more sets which define the states of \emph{Loans} and \emph{reservations}. 
+
+\begin{showspecs}
+	\begin{spec}{\i{LD}}
+		\i{LL} \sep \i{LR}\\
+		\i{today}: \p{DATE}\\
+		\i{ls, le}: \i{loan} \tfun \p{DATE}\\
+		\i{rs, re}: \i{reserve} \tfun \p{DATE}\\
+		%Add another state, for when loans arent overdue, they're still in their loan period
+		%		
+		%\{\i{OverDue,DueToday}\}: \p{part}\,\i{Loan}\\
+		\i{DueToday}:=\!\{l\!:\!\i{loan}\bullet\i{le}(l) = today\}\\
+		\i{OverDue}:=\!\{l\!:\!\i{loan}\bullet\i{le}(l) > today\}\\
+		\i{ResExpire}:=\!\{r\!:\!\i{reserve}\bullet\i{re}(r) > today\}
+	%\post
+		%As I'm using the original loan declaration, these have already been made		
+		%\i{Loan'} = \emptyset\\
+		%\i{Loan}\cap\i{reserve} = \emptyset
+	\end{spec}
+\end{showspecs}
+		
+%\pagebreak
+
+\medskip\noindent We begin by introducing simple queries that help retrieve information. In this case, two queries are presented returning either date for a given loan. Having these kind of queries defined can help later on when creating more complex events or queries.
+
+\begin{showspecs}
+	\begin{spec}{\i{LD?showLoanStartDate(l \to d)}}
+		d := \i{ls}(l)
+	\end{spec}
+
+\showbeside
+
+	\begin{spec}{\i{LD?showLoanDueDate(l \to d)}}
+		d := \i{le}(l)
+	\end{spec}
+\end{showspecs}
+
+\pagebreak
+
+\medskip\noindent These two queries are replica's of the queries presented above, except return the dates for any given reservation.
+		
+\begin{showspecs}
+	\begin{spec}{\i{LD?showResStartDate(r \to d)}}
+		d := \i{rs}(r)		
+	\end{spec}
+	
+\showbeside	
+	
+	\begin{spec}{\i{LD?showResEndDate(r \to d)}}
+		d := \i{re}(r)
+	\end{spec}	
+\end{showspecs}	
+
+\iffalse
+%promote reserve event
+\medskip\noindent With the introduction of reservations being associated with dates, we need to record the date when the reservation was made. Events allow this to be possible, and having the variable \emph{today} we can store the date the reservation was made.
+
+\begin{showspecs}
+	\begin{spec}{\i{LD!setResDate(r)}}
+		r: reserve
+	\post
+		rd'(r) = today
+	\end{spec}
+\end{showspecs}
+
+\fi
+
+%\pagebreak
+
+\medskip\noindent Dates can become a confusing and difficult property to work with. In this case, today's \emph{today} is different to tomorrow's \emph{today}, likewise the outcome of \emph{today + 3} is different to the outcome of a different `today' + 3. Nevertheless, with this model being a high-level abstract representation, we don't have to focus on the background logic of \emph{`today'}, as long as we understand the basic behaviour for the variable.
+
+\medskip\noindent In this modelling choice, we need to establish an event for when today moves onto the next day. With this however, side affects are apparent. With a new day being introduced, loans could now become due for return that day, and loans could also become over due \emph{(if they were due what is now yesterday)}, similarly reservations could also expire.
+
+\medskip\noindent This particular event features a case analysis, this is because not all loans could be \emph{DueToday} before the day changes. With this aside, for all cases, there can be instances of reservations where the reservation end date is today, making it expire when the day changes.
+
+\begin{showspecs}
+	\begin{spec}{\i{LD!nextDay()}}
+		%r \notin ResExpire\\
+		\exists r: reserve \bullet \{re(r) = today\wedge r \notin ResExpire \}\\
+		\begin{alt}
+			l \in DueToday
+		\post
+			l \in OverDue'
+		\end{alt}
+	\post
+		today' = today + 1\\
+		r \in ResExpire'
+	\end{spec}
+\end{showspecs}
+
+%\pagebreak
+
+\medskip\noindent The invariant declaration for reservations now comes with a duration before it is classed \emph{`expired'}. This specific event inherits the method defined in the previous model. Once cancelled it is important to make sure this reservation is not a member of expired reservations anymore.
+
+\begin{showspecs}
+	\begin{spec}{\i{LD!expired(t, m \to p)}}
+		r \in ResExpire
+	\post
+		LR!Cancel(t, m \to p)\\
+		r \notin ResExpire'
+	\end{spec}
+\end{showspecs}
+
+\pagebreak
+
+\medskip\noindent This following query produces a set which shows all \emph{Title's} and their due dates in a tuple for a given member. By checking if the relation of the Title matches the member in a loan, we can determine the right loan for that given title and acquire the due date for that loan.
+
+\begin{showspecs}
+	\begin{spec}{\i{LD?dueDatesForMember(l, m \to L)}}
+		L : Title \nrightarrow \p{DATE} \\
+%		L = \{(t,d) : Title \times \p{DATE} \bullet ( \forall l : loan \bullet  \{l[2] = m\}) \Rightarrow\\
+%			\hspace{1.5cm}  t = l[1] \wedge d = l[5]\}
+		L = \{(t,d) : Title \times \p{DATE} \bullet t \mapsto m \in loan \wedge d = le(l)\}
+	\end{spec}
+\end{showspecs}
+
+%\pagebreak
+
+\medskip\noindent The next two queries follow the behaviour of the previous, just altered slightly. It can become an obvious request to have a set of all Members loaning a Title that is due today. 
+		
+\begin{showspecs}
+	\begin{spec}{\i{LD?loansDueToday(\to L)}}
+		L := \{l : DueToday\}
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent Likewise, it would be compulsory for a real-life scenario to know all the loans are overdue and the members who currently have an overdue loan. The major difference this query has compared to the previous is the tuple also containing the loans due date, to emphasise the meaning of having a loan overdue.
+
+\begin{showspecs}
+	\begin{spec}{\i{LD?loansOverDue(\to L)}}
+		L: Title \nrightarrow Member \times \p{DATE}\\
+		L = \{(t,m,d) : Title \times Member \times \p{DATE} \bullet \forall l : OverDue \Rightarrow \\
+			\hspace{1.5cm} t = l[1] \wedge m = l[2] \wedge d = le(l) \}
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent We need to promote this event from a previous model as we are introducing new variables and relations. With the need to now store dates for any loan, we want to inherit the behaviour previously stated, but just incorporate dates in to said loan. As we are creating a new loan in the post condition, we need to have this \emph{Title} and \emph{Member} who are mapped in parenthesis for the dates as they act as the loan.
+		
+\begin{showspecs}
+	\begin{spec}{\i{LD!LoanCopy(t,m)}}
+		t:\i{Title} \sep m:\i{Member} \sep n: \p{NAT} \sep d1 : \p{DATE} \sep d2 : \p{DATE} \\
+		t\mapsto m \notin \i{loan} \sep \i{na}(t) > n \sep d2 = d1 + \p{POS}\\
+		\begin{alt}
+			t\mapsto m \notin \i{reserve} \sep n = \i{nQ}(t)
+		\end{alt}\\
+		\begin{alt}
+			\!\i{LR!Cancel}(t,m \to p)\\
+			n = p-1
+		\end{alt}
+		
+	\post
+
+		t \mapsto m \in loan'\\
+		( t\mapsto m ) \mapsto d1 \in ls' \\
+		( t \mapsto m ) \mapsto d2 \in le'
+	\end{spec}
+\end{showspecs}	
+
+\medskip\noindent Here we are giving the option for a member to extend their loan. Presented are two possible scenarios for this event. We can either reinstate the date for a given loan, or simply increment the due date by a positive integer. 
+		
+\begin{showspecs}
+	\begin{spec}{\i{LD!extendLoan(l, d)}}
+		l : loan \sep d : \p{DATE} \sep d \neq le(l)
+	\post
+		le'(l) = d
+	\end{spec}
+	
+\showbeside
+	\begin{spec}[\equiv]{\i{LD!extendLoan(l, d)}}
+		d = le(l)
+	\post
+		le'(l) = d + \p{POS}
+	\end{spec}
+\end{showspecs}	
+		
+\medskip\noindent Here is another event that required a promotion with added functionality. As we are also introducing dates to reservations, we need to inherit the previous behaviour and apply dates to the new relations we have stated in the invariant. This particular event has similar post conditions to \emph{LD!LoanCopy}, in the fact that because this is a new reservation we have the mapping of \emph{$ t \mapsto m$} in parenthesis to act as the reservation for the new relations.
+		
+\begin{showspecs}
+	\begin{spec}{\i{LD!Reserve(t, m \to p)}}
+		t : Title \sep m : Member \\
+		p : \p{POS} \sep d1 : \p{DATE} \sep d2 : \p{DATE} \\
+		t \mapsto m \notin reserve \sep t \mapsto m \notin loan \\
+		p = nQ(t) + 1 \sep d2 = d1 + \p{POS}
+	\post
+		requestQ'(t) = (requestQ(t)) \langle m \rangle \\
+		nQ'(t) = p\\
+		t \mapsto m \in reserve'\\
+		(t \mapsto m) \mapsto d1 \in rs'\\
+		(t \mapsto m) \mapsto d2 \in re'
+	\end{spec}
+\end{showspecs}	
+
+\medskip\noindent Finally we'll update the \emph{showCollection} query from the loan class to include the number of reservations for each title in the collection:
+		
+\begin{showspecs}
+	\begin{spec}{\i{LD?showCollection( \to C)}}
+		C : Title \nrightarrow \p{POS} \times \p{NAT} \nrightarrow \p{NAT} \times \g{D}\\
+		C = \{(t,n,l,q,d) : InColl \times \p{POS} \times \p{NAT} \times \p{NAT} \times \g{D} \hspace{.1cm}\bullet\\
+			\hspace{1.5cm} n = nc(t) \wedge l = nl(t) \wedge q = nQ(t) \wedge d = desc(t)\}
+	\end{spec}
+\end{showspecs}	
+		
+
+\subsubsection*{Direct promotions}
+		
+\medskip\noindent The remaining queries and events are just direct promotions from the previous invariants that do not need any additional changes for the extension of this system.
+		
+\begin{showspecs}
+	\begin{spec}{\i{LD?showInfo(m \to i)}}
+		LM?showInfo(m \to i)
+	\end{spec}
+
+	\showbeside
+	
+	\begin{spec}{LD?showMembers( \to M)}
+		LM?showMembers( \to M)
+	\end{spec}
+
+\end{showspecs}
+
+\begin{showspecs}
+	\begin{spec}{\i{LD?showDesc(t \to d)}}
+		LM?showDesc(t \to d)
+	\end{spec}
+
+	\showbeside
+	
+	\begin{spec}{LD?showNoCopies(t \to n)}
+		LC?showNoCopies(t \to n)
+	\end{spec}
+
+\end{showspecs}
+
+\begin{showspecs}
+	\begin{spec}{\i{LD?showLoans(t \to M)}}
+		LL?showLoans(t \to M)
+	\end{spec}
+
+	\showbeside
+	
+	\begin{spec}{LD?showRequests(t \to Q)}
+		LR?showRequests(t \to Q)
+	\end{spec}
+
+\end{showspecs}
+
+\begin{showspecs}
+	\begin{spec}{\i{LD!NewMember(i \to m)}}
+		LM!NewMember(m, i)
+	\end{spec}
+
+	\showbeside
+	
+	\begin{spec}{LD!UpdateInfo(m, i)}
+		LM!UpdateInfo(m, i)
+	\end{spec}
+
+\end{showspecs}
+
+\begin{showspecs}
+	\begin{spec}{\i{LD!AddCopies(t, n)}}
+		LL!AddCopies(t, n)
+	\end{spec}
+
+	\showbeside
+	
+	\begin{spec}{LD!RemoveCopy(t)}
+		LL!RemoveCopy(t)
+	\end{spec}
+
+\end{showspecs}
+
+
+		
+		
+\begin{showspecs}
+	\begin{spec}{\i{LD!Return(t, m)}}
+		LL!Return(t, m)
+	\end{spec}
+
+	\showbeside
+
+	\begin{spec}{\i{LD!Cancel(t, m \to p)}}
+		LR!Cancel(t, m \to p)
+	\end{spec}
+\end{showspecs}			
+		
+		
+		
+		
+		
+		
+		
+\iffalse
+
+\pagebreak
+		
+		
+		
+		
+%		C\!=\!\{(t,n,l,q,d):\i{InColl}\times\p{POS}\!\times\p{NAT}\!\times\p{NAT}\!\times\g{D}\;\bullet\\
+%       \hspace{1cm} n = \i{nc}(t)\wedge l = \i{nl}(t)\wedge q = \i{nQ}(t)\wedge d = \i{desc}(t)\}
+		
+%		\{\i{InColl,ExColl}\}: \p{part}\,\i{Title}\\
+%		\i{InColl}:=\!\{t\!:\!\i{Title}\bullet\i{nc}(t) > 0\}
+
+
+
+
+%\vspace{-1cm}
+\noindent This case-study involves modelling an information system to support a simple
+\emph{Lending Library Service}. This will be approached as an exercise in
+\emph{Requirements Engineering}
+where the aim is to develop a \emph{model}, capturing
+high-level requirements for such a system
+to produce an agreed \emph{formal specification}.
+We make use of \emph{Formal Methods},
+exploiting the power of discrete mathematics
+to model, and to reason, \emph{abstractly} over a succession of separate \emph{levels}
+producing a \emph{modular} de-composition of the system.
+
+
+
+\subsubsection*{Membership Class: $\i{LM}$}
+
+We begin by defining an invariant for a simple membership class. Members belong to a finite, initially-empty,
+set named \i{Member} and each member has some associated \emph{information}:
+\begin{showspecs}
+	\begin{spec}{\i{LM}}
+		\i{Member}: \p{set}\;\g{M}\\
+		\i{info}: \i{Member} \tfun \g{I}
+	\post	\i{Member'} = \emptyset
+	\end{spec}
+\end{showspecs}
+
+\noindent
+The \emph{types} for both a member identifier and its
+associated information are specified here as two given, \emph{fully-abstract}, sets named \g{M} and \g{I};
+the definition of their concrete data-representations is left to later \emph{refinements}.
+The \emph{initial-condition} for class \i{LM},
+together with its \emph{invariant}, imply that all components
+are empty when the class is first \emph{instantiated}.
+
+\medskip\noindent A \emph{query} is an operation that provides information about the state of objects in the system.
+In this class, we can define a query that shows the information associated with a member:
+\begin{showspecs}
+	\begin{spec}{\i{LM?showInfo(m \to i)}}
+		i := \i{info}(m)
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LM?showInfo(m \to i)}}
+		m:\i{Member} \sep i: \g{I}\\ i = \i{info}(m)
+	\end{spec}
+\end{showspecs}
+\noindent and another that lists all the members, together with their information:
+\begin{showspecs}
+	\begin{spec}{\i{LM?showMembers(\to M)}}
+		M:= \i{info}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LM?showMembers(\to M)}}
+		M: \i{Member} \tfun \g{I} \sep M = \i{info}
+	\end{spec}
+\end{showspecs}
+\noindent In both cases their \emph{pre-conditions} have been expanded
+to clarify these specifications by providing type information implicit from the invariant.
+
+\medskip\noindent An \emph{event} is an operation that changes the state of the system. We obviously require at least one event
+for this class, an operation to `enrol' a new member, since the set \i{Member} is initially empty:
+\begin{showspecs}
+	\begin{spec}{\i{LM!NewMember(i \to m)}}
+		i: \g{I} \sep m: \g{M} \sep m\notin\i{Member}
+	\post	m \in \i{Member'} \sep \i{info'}(m) =\, i
+	\end{spec}
+\end{showspecs}
+
+\smallskip\noindent An operation to `update' the recorded
+information for existing members can also be defined:
+\begin{showspecs}
+	\begin{spec}{\i{LM!UpdateInfo(m,i)}}
+		m: \i{Member} \sep i: \g{I} \sep i \neq \i{info}(m)
+	\post	\i{info'}(m) =\, i
+	\end{spec}
+\end{showspecs}
+\smallskip\noindent \textbf{Exercise}\exer\\
+Provide a \emph{simple}
+specification of an operation to `remove' a current member.
+
+
+\subsubsection*{Catalog Class: $\i{LT}$}
+
+The library's catalog can be modelled as an
+initially-empty set of \emph{titles},
+where each title has an associated \emph{description}:
+\begin{showspecs}
+	\begin{spec}{\i{LT}}
+		\i{Title}: \p{set}\;\g{T}\\
+		\i{desc}: \i{Title} \tfun \g{D}
+	\post	\i{Title'} = \emptyset
+	\end{spec}
+\end{showspecs}
+\noindent Observe that class \i{LT} has a
+\emph{specification} that is very similar to the class \i{LM} -- only the \emph{names}
+differ. The operations we need for \i{LT} are also similar to those provided for \i{LM}.
+
+\medskip\noindent We can provide a query that shows the description of a particular title:
+\begin{showspecs}
+	\begin{spec}{\i{LT?showDesc(t \to d)}}
+		d := \i{desc}(t)
+	\end{spec}
+\end{showspecs}
+\noindent and one that lists the full catalog of titles together with their descriptions:
+\begin{showspecs}
+	\begin{spec}{\i{LT?showCatalog(\to T)}}
+		T:= \i{desc}
+	\end{spec}
+\end{showspecs}
+
+\newpage
+
+\medskip\noindent We require at least one event for \i{LT}
+-- an operation to `enter' a new title into the system, since the set \i{Title} is initially empty:
+\begin{showspecs}
+	\begin{spec}{\i{LT!NewTitle(d \to t)}}
+		d:\g{D} \sep t: \g{T} \sep t \notin\i{Title}
+	\post	t \in \i{Title'} \sep \i{desc'}(t) =\, d
+	\end{spec}
+\end{showspecs}
+\medskip\noindent
+\textbf{Exercise}\exer\\
+Suppose that an operation to `update' the description for
+a known title along with one to `remove' such
+a title were required at the level of class
+\i{LT}. Give a \emph{simple} specification for each event.
+
+
+%\newpage\defwidth[5.75cm]
+\subsubsection*{Collection Class: $\i{LC}$}
+
+We model a library's `collection' (of hard copies) by \emph{extending} the catalog class.
+We add a function \emph{nc} to record the current `number of copies'
+for every title and define a \emph{partition} over the set of such titles, based on the value of \emph{nc};
+titles are \emph{in-collection} if there are copies of the title in the collection,
+otherwise they are \emph{ex-collection}:
+\begin{showspecs}
+	\begin{spec}{\i{LC}}
+		\i{LT}\\[0.5ex]
+		\i{nc}: \i{Title} \tfun \p{NAT}\\[0.5ex]
+		\{\i{InColl,ExColl}\}: \p{part}\,\i{Title}\\
+		\i{InColl}:=\!\{t\!:\!\i{Title}\bullet\i{nc}(t) > 0\}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LC}}
+		\i{Title}: \p{set}\;\g{T}\\
+		\i{desc}: \i{Title} \tfun \g{D}\\
+		\i{nc}: \i{Title} \tfun \p{NAT}\\
+		\i{InColl}:=\!\{t\!:\!\i{Title}\bullet\i{nc}(t) > 0\}\\
+		\i{ExColl}\!:=\!\{t\!:\!\i{Title}\bullet\i{nc}(t) = 0\}
+	\post	\i{Title'} = \emptyset
+	\end{spec}
+\end{showspecs}
+\noindent Other state-components, and the initial-condition, are
+``inherited" from \i{LT}. That (intermediate) class specification
+is said to be \emph{imported} into class \i{LC}: its invariant must
+always hold there, but this may be consistently \emph{extended};
+the operations it provides may also be applied or extended
+in such contexts.
+
+\smallskip\noindent Required queries at this level might be similar
+to those provided for a catalog.
+Indeed, we will directly \emph{promote} the query \emph{showDesc} from class \i{LT}:
+\begin{showspecs}
+	\begin{spec}{\i{LC?showDesc(t \to d)}}
+		\i{LT?showDesc(t \to d)}
+	\end{spec}
+\end{showspecs}
+\noindent and add a query showing the number of copies for a given title:
+\begin{showspecs}
+	\begin{spec}{\i{LC?showNoCopies(t \to n)}}
+		n:=\i{nc}(t)
+	\end{spec}
+\end{showspecs}
+
+\newpage
+\noindent However, we will redefine the query \emph{showCatalog} to include
+information only about titles that are in-collection and extend the query to include the
+number of copies for each title as well as its description:
+\begin{showspecs}
+	\begin{spec}{\i{LC?showCollection(\to C)}}
+		C: \i{Title}\pfun\p{POS}\!\times\g{D}\\
+		C\!=\!\{(t,n,d):\i{InColl}\times\p{POS}\!\times\g{D}\bullet n = \i{nc}(t)\wedge d = \i{desc}(t)\}
+	\end{spec}
+\end{showspecs}
+
+
+\smallskip\noindent We extend the \i{NewTitle} event from \i{LT},
+so as to `fix' (as zero) an \emph{initial} number of copies:
+\begin{showspecs}
+	\begin{spec}{\i{LC!NewTitle(d \to t)}}
+		\i{LT!NewTitle(d \to t)}
+	\post	\i{nc'}(t) =\,0
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LC!NewTitle(d \to t)}}
+		d:\g{D} \sep t:\g{T} \sep t\notin\i{Title}
+	\post	t \in \i{Title'\,\cap ExColl'}\\
+		\i{Desc'}(t) =\,d \sep \i{nc'}(t) =\,0
+	\end{spec}
+\end{showspecs}\smallskip\noindent
+\noindent When a new title is added it is ex-collection.
+We then clearly need some way to `modify' the number
+of copies as well
+\begin{showspecs}
+	\begin{spec}{\i{LC!AddCopies(t,n)}}	
+		t: \i{Title} \sep n: \p{POS}
+	\post	\i{nc'}(t) = \i{nc}(t) + n
+	\end{spec}
+\showbeside
+	\begin{spec}{\i{LC!RemoveCopy(t)}}	
+		t: \i{InColl}
+	\post	\i{nc'}(t) = \i{nc}(t) - 1
+	\end{spec}
+\end{showspecs}\medskip\noindent
+The operations specified at this level involve modelling choices.
+These decisions should satisfy the relevant requirements
+of our intended \emph{client}.
+
+\medskip\noindent
+\textbf{Exercise}\exer\\
+Expand the \i{LC} events \i{AddCopies} and \i{RemoveCopy} to show all
+\emph{changes-of-state} imposed by the state-invariant.
+
+\medskip\noindent
+\textbf{Exercise}\exer\\
+Suppose that operations for class \i{LC} do not fully
+satisfy requirements of a client. Explore some possible
+alternatives, then specify that query or event:
+
+\vspace{-1ex}\begin{enumerate}
+\item there should be a way to show descriptions for titles
+	having \emph{no} copies;
+
+\item it should be possible to fix the initial number of copies
+	for a new title;
+
+\item it should be possible to remove \emph{more than one} copy at the
+	same time;
+
+\item one operation should serve to \emph{increase} or \emph{decrease}
+	the number of copies.
+\end{enumerate}
+
+
+\newpage
+\subsubsection*{Loan Class:
+		$\i{LL}$}
+
+We model a simple loan class by \emph{composing} the
+classes \i{LM} and \i{LC}. These two classes are independent so composing them will produce a consistent invariant.
+We then extend their combined state,
+to define the set of all current `loans', which is expressed mathematically as a
+\emph{relation} (\i{loan}), and the numbers of `available'
+and `loaned' copies (the functions \i{na} and \i{nl}, respectively) for each title:
+\begin{showspecs}
+	\begin{spec}{\i{LL}}
+		\i{LM} \sep \i{LC}\\[0.5ex]
+		\i{loan}: \i{Title \prel Member}\\[0.5ex]
+		\i{na,nl}: \i{Title} \tfun \p{NAT}\\[0.5ex]
+		\forall t: \i{Title}\, \bullet \\
+        \hspace{0.5cm}\i{nc}(t) = \i{na}(t)+\i{nl}(t) \,\wedge\\
+		\hspace{0.5cm}\i{nl}(t) = \#\{m:\i{Member}\bullet t\mapsto m\in \i{loan}\}
+	\end{spec}
+\end{showspecs}
+
+\begin{showspecs}
+	\begin{spec}[\equiv]{\i{LL}}
+		\i{Member}: \p{set}\;\g{M}\\
+		\i{info}: \i{Member} \tfun \g{I}\\[0.5ex]
+		\i{Title}: \p{set}\;\g{T}\\
+		\i{desc}: \i{Title} \tfun \g{D}\\[0.5ex]
+		\i{loan}: \i{Title \prel Member}\\
+		\i{nc,na,nl}: \i{Title} \tfun \p{NAT}\\[0.5ex]
+		\i{InColl}:=\!\{t\!:\!\i{Title}\bullet\i{nc}(t) > 0\}\\
+		\i{ExColl}\!:=\!\{t\!:\!\i{Title}\bullet\i{nc}(t) = 0\}\\[0.5ex]
+		\forall t: \i{Title}\, \bullet \\
+        \hspace{0.5cm}\i{nc}(t) = \i{na}(t)+\i{nl}(t) \,\wedge\\
+		\hspace{0.5cm}\i{nl}(t) = \#\{m:\i{Member}\bullet t\mapsto m\in \i{loan}\}
+	\post	\i{Member'} = \emptyset \sep \i{Title'} = \emptyset
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent Class \i{LL} embodies a significant assumption:
+\emph{a member may borrow at most one copy of any particular title at the same time}.
+
+\bigskip\noindent The membership queries are needed at this level so they are
+directly \emph{promoted}, as are two of the collection queries:
+\begin{showspecs}
+	\begin{spec}{\i{LL?showInfo(m \to i)}}
+		\i{LM?showInfo(m \to i)}
+	\end{spec}
+\showbeside
+	\begin{spec}{\i{LL?showMembers(\to M)}}
+		\i{LM?showMembers(\to M)}
+	\end{spec}
+\end{showspecs}\smallskip
+\begin{showspecs}
+	\begin{spec}{\i{LL?showDesc(t \to d)}}
+		\i{LC?showDesc(t \to d)}
+	\end{spec}
+\showbeside
+	\begin{spec}{\i{LL?showNoCopies(t \to n)}}
+		\i{LC?showNoCopies(t \to n)}
+	\end{spec}
+\end{showspecs}\noindent
+
+\medskip\noindent
+We add a query to show the number of available copies for a given title:
+\begin{showspecs}
+	\begin{spec}{\i{LL?availableCopies(t \to n)}}
+		n:=\i{na}(t)
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent
+and update the \i{showCollection} query from the collection class:
+\begin{showspecs}
+	\begin{spec}{\i{LL?showCollection(\to C)}}
+		C: \i{Title}\pfun\p{POS}\!\times\p{NAT}\!\times\g{D}\\
+		C\!=\!\{(t,n,l,d):\i{InColl}\times\p{POS}\!\times\p{NAT}\!\times\g{D}\;\bullet\\
+        \hspace{1cm} n = \i{nc}(t)\wedge l = \i{nl}(t)\wedge d = \i{desc}(t)\}
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent
+Finally, we add a query that shows the set of members borrowing copies of a given title:
+\begin{showspecs}
+	\begin{spec}{\i{LL?showLoans(t \to M)}}
+		M :=\{m:\i{Member}\,\bullet\, t\mapsto m\in \i{loan}\}
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent
+Many of the events at this level are also promotions:
+\begin{showspecs}
+	\begin{spec}{\i{LL!NewMember(i \to m)}}
+		\i{LM!NewMember(i \to m)}
+	\end{spec}
+\showbeside
+	\begin{spec}{\i{LL!UpdateInfo(m,i)}}
+		\i{LM!UpdateInfo(m,i)}
+	\end{spec}
+\end{showspecs}\smallskip
+\begin{showspecs}
+	\begin{spec}{\i{LL!NewTitle(d \to t)}}
+		\i{LC!NewTitle(d \to t)}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LL!NewTitle(d \to t)}}
+		d:\g{D} \sep t:\g{T} \sep t \notin \i{Title}
+	\post	t \in \!\i{Title' \cap ExColl'};~ \i{desc'}(t) = d\\
+		\i{nc'}(t) = \i{na'}(t) = \i{nl'}(t) = 0
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent The \i{NewTitle} event has been expanded to show that the number of available and loaned copies is initially zero.
+\i{AddCopies} is also promoted but expanded to show how the number of available copies is increased:
+\begin{showspecs}
+	\begin{spec}{\i{LL!AddCopies(t,n)}}	
+		\i{LC!AddCopies(t,n)}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LL!AddCopies(t,n)}}	
+		t: \i{Title} \sep n: \p{POS}
+	\post	
+		\i{nc'}(t) = \i{nc}(t) + n\\
+		\i{na'}(t) = \i{na}(t) + n
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent \i{RemoveCopy} is extended to clarify the pre-condition; the removed copy must be an available copy:
+\begin{showspecs}
+	\begin{spec}{\i{LL!RemoveCopy(t)}}	
+		\i{LC!RemoveCopy(t)}\\
+		\i{na}(t) > 0
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LL!RemoveCopy(t)}}	
+		t: \i{Title} \sep \i{nc}(t) \geq \i{na}(t) > 0
+	\post	
+		\i{nc'}(t) = \i{nc}(t) - 1\\
+		\i{na'}(t) = \i{na}(t) - 1
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent
+We require an event to allow members to make loans:
+\begin{showspecs}
+	\begin{spec}{\i{LL!LoanCopy(t,m)}}
+		t:\i{Title} \sep m: \i{Member}\\
+		t\mapsto m \notin \i{loan}\\
+		\i{na}(t) > 0
+	\post	t\mapsto m \in \i{loan'}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LL!LoanCopy(t,m)}}
+		t:\i{Title} \sep m: \i{Member}\\
+		t\mapsto m \notin \i{loan}\\
+		\i{na}(t) > 0
+	\post	t\mapsto m \in \i{loan'}\\
+		\i{na'}(t) = \i{na}(t) - 1\\
+		\i{nl'}(t) = \i{nl}(t) + 1
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent Finally at this level, we define an event to return a copy:
+\begin{showspecs}
+	\begin{spec}{\i{LL!Return(t,m)}}
+		t\mapsto m: \i{loan}
+	\post	t\mapsto m \notin \i{loan'}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LL!Return(t,m)}}
+		t:\i{Title} \sep m: \i{Member}\\
+		t\mapsto m \in \i{loan}\\
+        \i{nl}(t) > 0
+	\post	t\mapsto m \notin \i{loan'}\\
+		\i{na'}(t) = \i{na}(t) + 1\\
+		\i{nl'}(t) = \i{nl}(t) - 1
+	\end{spec}
+\end{showspecs}
+
+\smallskip\noindent The expanded versions of \i{LoanCopy} and \i{Return}
+show how the numbers of available and loaned copies change.
+
+\smallskip\noindent
+Throughout this specification we have defined \emph{minimal} versions of the operations.
+We are able to do this because of the assumption that \emph{``the rest remains unchanged"}.
+In some cases we used expansion to explicitly present interesting derived properties.
+
+\medskip\noindent
+\textbf{Exercise}\exer\\
+Show that the assumption \emph{a member may borrow at most one copy of any particular title at the same time}
+is implicit from the invariant of class \i{LL}.
+
+\medskip\noindent
+\textbf{Exercise}\exer\\
+Define a query to show titles borrowed by a member.
+
+\medskip\noindent
+\textbf{Exercise}\exer\\
+Suppose that operations to `remove' members or titles were provided for class \i{LL}.
+Specify these events, which are \emph{applicable} only when the respective member or title does not figure in any current loan.
+%
+\newpage
+\subsubsection*{Reservation Class: $\i{LR}$}
+
+We specify \i{LR} as a class parallel to \i{LL} to allow titles to be reserved.
+Eventually we will compose \i{LL} and \i{LR} to specify a library system able to provide both loans and reservations.
+To specify \i{LR}, we again export and compose \i{LM} and \i{LC} as we did for \i{LL}.
+We define a `request queue' (\i{requestQ}) to be a function that delivers,
+for each title $t$, the sequence of members currently requesting a copy of $t$.
+Similarly to \i{loans} in class \i(LL), we define the current reservations as a relation (\i{reserve}).
+We also define the number of requests (\i{nQ}) for each title.
+
+\begin{showspecs}
+	\begin{spec}{\i{LR}}
+		\i{LM} \sep \i{LC}\\[0.5ex]
+		\i{requestQ}: \i{Title}\tfun\p{inj}\cdot\p{seq}\;\i{Member}\\[0.5ex]
+		\i{reserve}: \i{Title} \prel \i{Member}\\
+		\,\p{cf}\,\i{reserve} = \p{cod}\circ\i{requestQ}\\
+		\i{nQ}:= (\#)\circ\i{requestQ}
+	\end{spec}
+\end{showspecs}
+\begin{showspecs}
+	\begin{spec}[\equiv]{\i{LR}}
+		\i{Member}: \p{set}\;\g{M}\\
+		\i{info}: \i{Member} \tfun \g{I}\\[0.5ex]
+		\i{Title}: \p{set}\;\g{T}\\
+		\i{desc}: \i{Title} \tfun \g{D}\\[0.5ex]
+		\i{requestQ}: \i{Title}\tfun\p{inj}\cdot\p{seq}\;\i{Member}\\
+		\i{reserve}: \i{Title} \prel \i{Member}\\
+		\i{nc,nQ}: \i{Title} \tfun \p{NAT}\\[0.5ex]
+		\i{InColl}:=\!\{t\!:\!\i{Title}\bullet\i{nc}(t) > 0\}\\
+		\i{ExColl}\!:=\!\{t\!:\!\i{Title}\bullet\i{nc}(t) = 0\}\\[0.5ex]
+		\forall t: \i{Title}\, \bullet \\
+        \hspace{0.5cm}\{m:\i{Member}\bullet t\mapsto m\in \i{reserve}\} = \{m:\i{Member}\bullet m\in \p{cod}\,\i{requestQ}(t)\}\,\wedge\\
+		\hspace{0.5cm}\i{nQ}(t) = \#\{m:\i{Member}\bullet t\mapsto m\in \i{reserve}\}\,\wedge\\
+        \hspace{0.5cm}\i{nQ}(t) = \#\i{requestQ}(t)
+	\post	\i{Member'} = \emptyset \sep \i{Title'} = \emptyset
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent Class \i{LR} embodies another significant assumption:
+\emph{a member may have at most one request for every title outstanding at the same time.}\\
+
+\noindent As we plan to compose this class with \i{LL}, we won't promote or extend any of the existing queries to this level.
+However, we will define a query to show the queue of requests for a particular title:
+
+\begin{showspecs}
+	\begin{spec}{\i{LR?showRequests(t \to Q)}}
+		Q := \i{requestQ}(t)
+	\end{spec}
+\end{showspecs}
+
+\noindent We need to extend the collection event
+\i{NewTitle} at this level, to create a new (initially-empty)
+request queue for the title that is introduced:
+\begin{showspecs}
+	\begin{spec}{\i{LR!NewTitle(d \to t)}}
+		\i{LC!NewTitle(d \to t)}
+	\post	\i{requestQ'}(t) = \langle\rangle
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LR!NewTitle(d \to t)}}
+		d:\g{D} \sep t:\g{T} \sep t \notin \i{Title}
+	\post	t \in \i{Title' \cap\, ExColl'}\\
+		\i{desc'}(t) =\,d \sep \i{requestQ'}(t) = \langle\rangle\\
+		\i{nc'}(t) = \i{nQ'}(t) =\,0
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent Further events will be required in this context to
+update the pending requests for some particular title.
+An event to allow a member to reserve a particular title:
+\begin{showspecs}
+	\begin{spec}{\i{LR!Reserve(t,m \to p)}}
+		t: \i{Title} \sep m: \i{Member} \sep p: \p{POS}\\
+		t \mapsto m \notin \i{reserve} \sep p = \i{nQ(t)} + 1
+	\post	\i{requestQ'}(t) = (\i{requestQ}(t)) \langle m \rangle\\
+		\i{nQ'}(t) =\,p\\
+		t \mapsto m \in \i{reserve'}
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent and an event to cancel such a reservation:
+\begin{showspecs}
+	\begin{spec}{\i{LR!Cancel(t,m \to p)}}
+		t: \i{Title} \sep m: \i{Member} \sep p: \p{POS}\\
+		t \mapsto m \in \i{reserve} \\
+		Q_1 \langle m \rangle Q_2:= \i{requestQ}(t)\\
+        p = \#\,Q_1 + 1
+	\post	\i{requestQ'}(t) =\; Q_1 \langle\rangle\,Q_2\\
+		\i{nQ'}(t) = \i{nQ}(t) - 1\\
+		t \mapsto m \notin \i{reserve'}
+	\end{spec}
+\end{showspecs}
+\noindent These two events preserve the \emph{relative}
+ordering of all other pending requests whenever one for
+title $t$ and member $m$ is either `reserved' or `cancelled';
+they also give its new or previous position $p$ in the queue.
+
+\medskip\noindent
+\textbf{Exercise}\exer\\
+Show that the assumption \emph{a member may have at most one request for every title outstanding at the same time}
+is implicit from the invariant of class \i{LR}.
+
+\medskip\noindent
+\textbf{Exercise}\exer\\
+Were we to remove a member, we'd need to consider their requests as well.
+Would an event to remove a title need to consider requests for that title?
+Develop specifications of these two events (remove member, remove title) in this class.
+
+\newpage
+\subsubsection*{Simple Library Class: $\i{LS}$}
+
+We model a simple library class by \emph{composing} the loan (\i{LL}) and
+reservation (\i{LR}) classes. The composed specification must be consistent:
+\begin{showspecs}
+	\begin{spec}{\i{LS}}
+		\i{LL} \sep	\i{LR}\\[0.25ex]
+		\i{loan \cap reserve} = \emptyset
+	\end{spec}
+\end{showspecs}
+\begin{showspecs}
+	\begin{spec}[\equiv]{\i{LS}}
+		\i{Member}: \p{set}\;\g{M}\\
+		\i{info}: \i{Member} \tfun \g{I}\\[0.5ex]
+		\i{Title}: \p{set}\;\g{T}\\
+		\i{desc}: \i{Title} \tfun \g{D}\\[0.5ex]
+		\i{requestQ}: \i{Title}\tfun\p{inj}\cdot\p{seq}\;\i{Member}\\[0.5ex]
+		\i{loan,reserve}: \i{Title} \prel \i{Member}\\
+		\,\p{cf}\,\i{reserve} = \p{cod}\circ\i{requestQ}\\
+		\i{loan \cap reserve} = \emptyset\\[0.5ex]
+		\i{nc,na,nl,nQ}\!:\!\i{Title}\!\tfun\p{NAT}\\
+		\i{InColl}:=\!\{t\!:\!\i{Title}\bullet\i{nc}(t) > 0\}\\
+		\i{ExColl}\!:=\!\{t\!:\!\i{Title}\bullet\i{nc}(t) = 0\}\\
+        \forall t: \i{Title}\, \bullet \\
+        \hspace{0.5cm}\i{nc}(t) = \i{na}(t)+\i{nl}(t) \,\wedge\\
+		\hspace{0.5cm}\i{nl}(t) = \#\{m:\i{Member}\bullet t\mapsto m\in \i{loan}\} \,\wedge\\
+        \hspace{0.5cm}\{m:\i{Member}\bullet t\mapsto m\in \i{reserve}\} = \{m:\i{Member}\bullet m\in \p{cod}\,\i{requestQ}(t)\}\,\wedge\\
+		\hspace{0.5cm}\i{nQ}(t) = \#\{m:\i{Member}\bullet t\mapsto m\in \i{reserve}\}\,\wedge\\
+        \hspace{0.5cm}\i{nQ}(t) = \#\i{requestQ}(t)
+	\post	\i{Member'} = \emptyset \sep \i{Title'} = \emptyset
+	\end{spec}
+\end{showspecs}
+%
+\medskip\noindent To maintain consistency, we have imposed a further constraint at this level:
+\emph{for each title, a member may have at most one loan \emph{\,or} one reservation at the same time.}
+
+\bigskip\noindent Most required queries are now direct promotions:
+\begin{showspecs}
+	\begin{spec}{\i{LS?showInfo(m \to i)}}
+		\i{LM?showInfo(m \to i)}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LS?showInfo(m \to i)}}
+		m: \i{Member} \sep i:= \i{info}(m)
+	\end{spec}
+\showmore
+	\begin{spec}{\i{LS?showMembers(\to M)}}
+		\i{LM?showMembers(\to M)}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LS?showMembers(\to M)}}
+		M:= \i{info}
+	\end{spec}
+\showmore
+	\begin{spec}{\i{LS?showDesc(t \to d)}}
+		\i{LT?showDesc(t \to d)}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LS?showDesc(t \to d)}}
+		d := \i{desc}(t)
+	\end{spec}
+\showmore
+	\begin{spec}{\i{LS?showNoCopies(t \to n)}}
+		\i{LC?showNoCopies(t \to n)}
+	\end{spec}	
+\showbeside
+	\begin{spec}[\equiv]{\i{LS?showNoCopies(t \to n)}}
+		n:=\i{nc}(t)
+	\end{spec}
+\showmore
+	\begin{spec}{\i{LS?showLoans(t \to M)}}
+		\i{LL?showLoans(t \to M)}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LS?showLoans(t \to M)}}
+		M :=\{m:\i{Member}\,\bullet\, t\mapsto m\in \i{loan}\}
+	\end{spec}
+\showmore
+	\begin{spec}{\i{LS?showRequests(t \to Q)}}
+		\i{LR?showRequests(t \to Q)}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LS?showRequests(t \to Q)}}
+		Q := \i{requestQ}(t)
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent
+Finally we'll update the \i{showCollection} query from the loan class to include the number of reservations for each title in the collection:
+\begin{showspecs}
+	\begin{spec}{\i{LS?showCollection(\to C)}}
+		C: \i{Title}\pfun\p{POS}\!\times\p{NAT}\!\times\p{NAT}\!\times\g{D}\\
+		C\!=\!\{(t,n,l,q,d):\i{InColl}\times\p{POS}\!\times\p{NAT}\!\times\p{NAT}\!\times\g{D}\;\bullet\\
+        \hspace{1cm} n = \i{nc}(t)\wedge l = \i{nl}(t)\wedge q = \i{nQ}(t)\wedge d = \i{desc}(t)\}
+	\end{spec}
+\end{showspecs}
+
+\bigskip\noindent Most events are also direct promotions:
+\begin{showspecs}
+	\begin{spec}{\i{LS!NewMember(i \to m)}}
+		\i{LM!NewMember(i \to m)}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LS!NewMember(i \to m)}}
+		i:\g{I} \sep m:\g{M} \sep m \notin \i{Member}
+	\post	m \in \i{Member'} \sep \i{info'}(m) =\,i
+	\end{spec}
+\showmore
+	\begin{spec}{\i{LS!UpdateInfo(m,i)}}
+		\i{LM!UpdateInfo(m,i)}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LS!UpdateInfo(m,i)}}
+		m:\i{Member} \sep i:\g{I} \sep i \neq \i{info}\;m
+	\post	\i{info'}(m) =\,i
+	\end{spec}
+\showmore
+	\begin{spec}{\i{LS!AddCopies(t,n)}}	
+		\i{LL!AddCopies(t,n)}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LS!AddCopies(t,n)}}	
+		t: \i{Title} \sep n: \p{POS}
+	\post  \i{nc'}(t) = \i{nc}(t) + n\\
+            \i{na'}(t) = \i{na}(t) + n
+	\end{spec}
+\showmore
+	\begin{spec}{\i{LS!RemoveCopy(t)}}	
+		\i{LL!RemoveCopy(t)}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LS!RemoveCopy(t)}}	
+		t: \i{Title} \sep \i{nc}(t) \geq \i{na}(t) > 0
+	\post	
+		\i{nc'}(t) = \i{nc}(t) - 1\\
+		\i{na'}(t) = \i{na}(t) - 1
+	\end{spec}
+\end{showspecs}
+
+\newpage
+\noindent We inherit versions of NewTitle from both loan and reservation classes and combine them:
+
+\begin{showspecs}
+\showmore\begin{spec}{\i{LS!NewTitle(d \to t)}}
+		\i{LL!NewTitle(d \to t)}\\[0.25ex]
+		\i{LR!NewTitle(d \to t)}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LS!NewTitle(d \to t)}}
+		d:\g{D} \sep t:\g{T} \sep t \notin \i{Title}
+	\post	t \in\!\i{Title'}\sep t \in\!\i{ExColl'}\\
+        \i{desc'}(t) = d\\
+		\i{nc'}(t) = \i{na'}(t) = \i{nl'}(t)=0\\[0.25ex]
+        \i{nQ'}(t) = 0\\
+		\i{requestQ'}(t) = \langle\rangle
+	\end{spec}
+\end{showspecs}
+
+\bigskip\noindent  Stronger constraints are imposed for making a
+reservation, to preserve the invariant:
+
+\begin{showspecs}
+	\begin{spec}{\i{LS!Reserve(t,m \to p)}}
+		\i{LR!Reserve(t,m \to p)}\\[0.25ex]
+		\,t \mapsto m \notin \i{loan}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LS!Reserve(t,m \to p)}}
+		t: \i{Title} \sep m: \i{Member} \sep p: \p{POS}\\
+		t \mapsto m \notin \i{reserve}\cup\i{loan}\\
+		p = \i{nQ}(t) + 1
+	\post	\i{requestQ'}(t) = (\i{requestQ}(t)) \langle m \rangle\\
+		\i{nQ'}(t) =\,p\\
+		t \mapsto m \in \i{reserve'}
+	\end{spec}
+\end{showspecs}
+
+\bigskip\noindent The event \i{cancel} is just a promotion from the reservation class:
+\begin{showspecs}
+	\begin{spec}{\i{LS!Cancel(t,m \to p)}}
+		\i{LR!Cancel(t,m \to p)}
+	\end{spec}
+\showbeside
+	\begin{spec}{\i{LR!Cancel(t,m \to p)}}
+		t: \i{Title} \sep m: \i{Member} \sep p: \p{POS}\\
+		t \mapsto m \in \i{reserve} \\
+		Q_1 \langle m \rangle Q_2:= \i{requestQ}(t)\\
+        p = \#\,Q_1 + 1
+	\post	\i{requestQ'}(t) =\; Q_1 \langle\rangle\,Q_2\\
+		\i{nQ'}(t) = \i{nQ}(t) - 1\\
+		t \mapsto m \notin \i{reserve'}
+	\end{spec}
+\end{showspecs}
+
+\bigskip\noindent  The \i{LoanCopy} event becomes interesting when reservations are taken into account.
+There are two cases: the member has reserved the title or not.
+If not then the member can borrow a copy if there are more available copies than the number of reservations.
+Otherwise, that is the member has reserved the title, the member can borrow a copy if
+there are more available copies than the number of reservations prior to the member in the queue.
+In this case, the member's reservation is cancelled when the copy is loaned.
+
+\begin{showspecs}
+	\begin{spec}{\i{LS!LoanCopy(t,m)}}
+		\i{LL!LoanCopy(t,m)}\\
+		\,n:\p{NAT} \sep \i{na}(t) > n\\
+		\begin{alt}
+			t\mapsto m \notin \i{reserve} \sep n = \i{nQ}(t)
+		\end{alt}\\
+		\begin{alt}
+			\!\i{LR!Cancel}(t,m \to p)\\
+			n = p-1
+		\end{alt}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LS!LoanCopy(t,m)}}
+		t:\i{Title} \sep m:\i{Member} \sep n: \p{NAT}\\
+		t\mapsto m \notin \i{loan} \sep \i{na}(t) > n\\
+		\begin{alt}
+			t\mapsto m \notin \i{reserve} \sep n = \i{nQ}(t)
+		\end{alt}\\
+		\begin{alt}
+			t\mapsto m \in \i{reserve}\\
+			Q_1\langle\i{m}\rangle\,Q_2:= \i{requestQ}(t)\\
+            n = \#\,Q_1
+		\post
+			\i{requestQ'}(t) =\;Q_1 \langle\rangle\,Q_2\\	
+			\i{nQ'(t)} = \i{nQ(t)} - 1\\
+			t \mapsto m \notin \i{reserve'}
+		\end{alt}
+	\post	t \mapsto m \in \i{loan'}\\
+		\i{na'}(t) = \i{na}(t) - 1\\
+		\i{nl'}(t) = \i{nl}(t) + 1
+	\end{spec}
+\end{showspecs}
+
+\bigskip\noindent Finally, the event \i{Return} is a direct promotion from the loan class:
+\begin{showspecs}
+	\begin{spec}{\i{LS!Return(t,m)}}
+		\i{LL!Return(t,m)}
+	\end{spec}
+\showbeside
+	\begin{spec}[\equiv]{\i{LS!Return(t,m)}}
+		t:\i{Title} \sep m: \i{Member}\\
+		t\mapsto m \in \i{loan}\\
+        \i{nl}(t) > 0
+	\post	t\mapsto m \notin \i{loan'}\\
+		\i{na'}(t) = \i{na}(t) + 1\\
+		\i{nl'}(t) = \i{nl}(t) - 1
+	\end{spec}
+\end{showspecs}
+
+\medskip\noindent
+\textbf{Exercise}\exer\\
+We have promoted or re-defined all queries at this level;
+was it \emph{necessary} to specify them earlier?
+
+\medskip\noindent
+\textbf{Exercise}\exer\\
+Explain the extended \i{LoanCopy} event as specified for
+class \i{LS}, saying how its local variable $n$ corresponds
+to the number of prior reservations in both sub-cases.
+
+\medskip\noindent
+\textbf{Exercise}\exer\\
+Suggest ways in which the current Simple Library class can be extended or refined.
+(This is a very open-ended question.)
+
+\fi
+
+\end{document} 
